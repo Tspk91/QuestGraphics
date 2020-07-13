@@ -26,6 +26,7 @@ struct InputData
     half3   bakedGI;
     float2  normalizedScreenSpaceUV;
     half4   shadowMask;
+    half3   bakedGI_directionWS; // XYZ: Light direction, length is 'directionality'
 };
 
 ///////////////////////////////////////////////////////////////////////////////

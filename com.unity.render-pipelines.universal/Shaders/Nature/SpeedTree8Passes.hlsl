@@ -328,6 +328,7 @@ void InitializeInputData(SpeedTreeFragmentInput input, half3 normalTS, out Input
     inputData.bakedGI = SAMPLE_GI(input.interpolated.lightmapUV, input.interpolated.vertexSH, inputData.normalWS);
     inputData.normalizedScreenSpaceUV = GetNormalizedScreenSpaceUV(input.interpolated.clipPos);
     inputData.shadowMask = half4(1, 1, 1, 1); // No GI currently.
+    inputData.bakedGI_directionWS = half3(0,0,0);
 }
 
 #ifdef GBUFFER

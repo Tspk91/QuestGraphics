@@ -64,8 +64,8 @@ void InitializeInputData(GrassVertexOutput input, out InputData inputData)
     inputData.bakedGI = SAMPLE_GI(input.lightmapUV, input.vertexSH, inputData.normalWS);
     inputData.normalizedScreenSpaceUV = GetNormalizedScreenSpaceUV(input.clipPos);
     inputData.shadowMask = SAMPLE_SHADOWMASK(input.lightmapUV);
+    inputData.bakedGI_directionWS = half3(0,0,0);
 }
-
 
 void InitializeVertData(GrassVertexInput input, inout GrassVertexOutput vertData)
 {
