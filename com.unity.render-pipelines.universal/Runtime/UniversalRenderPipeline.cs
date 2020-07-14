@@ -756,8 +756,10 @@ namespace UnityEngine.Rendering.Universal
             cameraData.captureActions = CameraCaptureBridge.GetCaptureActions(baseCamera);
 
             bool needsAlphaChannel = Graphics.preserveFramebufferAlpha;
+            bool useHdrCameraTarget = cameraData.isHdrEnabled &&
+                                      settings.colorTransformation != ColorTransformation.InForwardPass;
             cameraData.cameraTargetDescriptor = CreateRenderTextureDescriptor(baseCamera, cameraData.renderScale,
-                cameraData.isHdrEnabled, msaaSamples, needsAlphaChannel);
+                useHdrCameraTarget, msaaSamples, needsAlphaChannel);
         }
 
         /// <summary>
