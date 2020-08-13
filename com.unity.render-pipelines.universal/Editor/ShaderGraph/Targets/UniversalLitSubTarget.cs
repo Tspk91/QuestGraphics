@@ -664,6 +664,8 @@ static class LitDefines
             public static readonly KeywordCollection Forward = new KeywordCollection
             {
                 { ScreenSpaceAmbientOcclusion },
+                { CoreKeywordDescriptors.GradingSettings },
+                { CoreKeywordDescriptors.ColorTransform },
                 { CoreKeywordDescriptors.Lightmap },
                 { CoreKeywordDescriptors.DirectionalLightmapCombined },
                 { CoreKeywordDescriptors.MainLightShadows },
