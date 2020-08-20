@@ -2,6 +2,9 @@ Shader "Hidden/Universal Render Pipeline/UberPost"
 {
     HLSLINCLUDE
         #pragma exclude_renderers gles
+	
+        // (ASG)
+        #pragma multi_compile _ _COLOR_TRANSFORM_IN_FORWARD
         #pragma multi_compile_local_fragment _ _DISTORTION
         #pragma multi_compile_local_fragment _ _CHROMATIC_ABERRATION
         #pragma multi_compile_local_fragment _ _BLOOM_LQ _BLOOM_HQ _BLOOM_LQ_DIRT _BLOOM_HQ_DIRT

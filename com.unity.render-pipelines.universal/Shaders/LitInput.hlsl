@@ -31,7 +31,7 @@ half _Surface;
 CBUFFER_END
 
 // (ASG) Used when tonemapping and color grading is done in the forward pass.
-//#ifdef _COLOR_TRANSFORM_IN_FORWARD
+#ifdef _COLOR_TRANSFORM_IN_FORWARD
 
 float4 _Lut_Params;
 float4 _UserLut_Params;
@@ -40,7 +40,7 @@ TEXTURE2D(_InternalLut);
 SAMPLER(sampler_LinearClamp);
 float _TestParam;
 
-//#endif
+#endif
 
 // NOTE: Do not ifdef the properties for dots instancing, but ifdef the actual usage.
 // Otherwise you might break CPU-side as property constant-buffer offsets change per variant.
