@@ -204,7 +204,6 @@ namespace UnityEngine.Rendering.Universal
             }
             m_OpaqueColor.Init("_CameraOpaqueTexture");
             m_AfterPostProcessColor.Init("_AfterPostProcessTexture");
-            m_ColorGradingLut.Init("_InternalGradingLut");
             m_DepthInfoTexture.Init("_DepthInfoTexture");
             m_TileDepthInfoTexture.Init("_TileDepthInfoTexture");
 
@@ -413,7 +412,7 @@ namespace UnityEngine.Rendering.Universal
 
             if (generateColorGradingLUT)
             {
-                m_ColorGradingLutPass.Setup(m_ColorGradingLut, ref renderingData);
+                m_ColorGradingLutPass.Setup(out m_ColorGradingLut, ref renderingData);
                 EnqueuePass(m_ColorGradingLutPass);
             }
 

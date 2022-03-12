@@ -22,7 +22,7 @@ namespace UnityEngine.Experimental.Rendering.Universal
         readonly RenderTargetHandle k_ColorTextureHandle;
         readonly RenderTargetHandle k_DepthTextureHandle;
         readonly RenderTargetHandle k_AfterPostProcessColorHandle;
-        readonly RenderTargetHandle k_ColorGradingLutHandle;
+        RenderTargetHandle k_ColorGradingLutHandle;
 
         Material m_BlitMaterial;
 
@@ -180,7 +180,7 @@ namespace UnityEngine.Experimental.Rendering.Universal
             // We generate color LUT in the base camera only. This allows us to not break render pass execution for overlay cameras.
             if (stackHasPostProcess && cameraData.renderType == CameraRenderType.Base)
             {
-                m_ColorGradingLutPass.Setup(k_ColorGradingLutHandle, ref renderingData);
+                m_ColorGradingLutPass.Setup(out k_ColorGradingLutHandle, ref renderingData);
                 EnqueuePass(m_ColorGradingLutPass);
             }
 
