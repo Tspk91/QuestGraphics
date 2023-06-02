@@ -111,9 +111,7 @@ namespace UnityEditor.Rendering.BuiltIn
 
         bool IsShaderGraphShader(Shader shader, ShaderSnippetData snippetData)
         {
-            var shaderData = ShaderUtil.GetShaderData(shader);
-            var serializedSubShader = shaderData.GetSerializedSubshader((int)snippetData.pass.SubshaderIndex);
-            var shaderGraphTag = serializedSubShader.FindTagValue(m_ShaderGraphShaderTag);
+            var shaderGraphTag = shader.FindSubshaderTagValue((int)snippetData.pass.SubshaderIndex, m_ShaderGraphShaderTag);
             if (shaderGraphTag == ShaderTagId.none)
                 return false;
             return true;
