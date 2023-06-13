@@ -1,17 +1,19 @@
 ﻿// (ASG) Include a few post processing functions from a file. But only the functions.
 #define UNIVERSAL_POSTPROCESSING_COMMON_ONLY_INCLUDE_UTILS
 #include "Packages/com.unity.render-pipelines.universal/Shaders/PostProcessing/Common.hlsl"
+#include "Packages/com.unity.render-pipelines.universal/Shaders/Utils/AsgColorPainting.hlsl"
 
 // (ASG) Used when tonemapping and color grading is done in the forward pass.
 #ifdef _COLOR_TRANSFORM_IN_FORWARD
 
 float4 _Lut_Params;
+float4 _UserLut_Params;
+TEXTURE2D(_UserLut);
 TEXTURE2D(_InternalLut);
 SAMPLER(sampler_LinearClamp);
+float _TestParam;
 
 #endif
-
-float _FadeToBlack;
 
 void BuildInputData(Varyings input, SurfaceDescription surfaceDescription, out InputData inputData)
 {
@@ -122,13 +124,15 @@ half4 frag(PackedVaryings packedInput) : SV_TARGET
     half4 color = UniversalFragmentPBR(inputData, surface);
 
     color.rgb = MixFog(color.rgb, inputData.fogCoord);
-    color.rgb *= _FadeToBlack;
 
     // (ASG) Add tonemapping and color grading in forward pass.
     // This uses the same color grading function as the post processing shader.
 #ifdef _COLOR_TRANSFORM_IN_FORWARD
-    color.rgb = ApplyColorGrading(color.rgb, _Lut_Params.w, TEXTURE2D_ARGS(_InternalLut, sampler_LinearClamp), _Lut_Params.xyz);
+    color.rgb = ApplyColorGrading(color.rgb, _Lut_Params.w, TEXTURE2D_ARGS(_InternalLut, sampler_LinearClamp), _Lut_Params.xyz, TEXTURE2D_ARGS(_UserLut, sampler_LinearClamp), _UserLut_Params.xyz, _UserLut_Params.w);
 #endif
+
+    // (ASG) After SDR transformation, apply custom vertex painting blend.
+    color.rgb = ApplyVertexColorBlend(color.rgb, SRGBToLinear(unpacked.color));
 
     return color;
 }
