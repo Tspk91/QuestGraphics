@@ -78,13 +78,11 @@ namespace UnityEditor.Rendering.Universal.ShaderGUI
         // material main advanced options
         public override void DrawAdvancedOptions(Material material)
         {
-            // (ASG) added 'realtimeMainLight' property.
-            if (litProperties.reflections != null && litProperties.highlights != null && litProperties.realtimeMainLight != null)
+            if (litProperties.reflections != null && litProperties.highlights != null)
             {
                 EditorGUI.BeginChangeCheck();
                 materialEditor.ShaderProperty(litProperties.highlights, LitGUI.Styles.highlightsText);
                 materialEditor.ShaderProperty(litProperties.reflections, LitGUI.Styles.reflectionsText);
-                materialEditor.ShaderProperty(litProperties.realtimeMainLight, LitGUI.Styles.realtimeMainLightText);
                 if(EditorGUI.EndChangeCheck())
                 {
                     MaterialChanged(material);

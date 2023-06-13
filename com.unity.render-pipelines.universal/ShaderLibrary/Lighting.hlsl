@@ -867,9 +867,7 @@ half4 UniversalFragmentPBR(InputData inputData, SurfaceData surfaceData)
     half4 shadowMask = half4(1, 1, 1, 1);
 #endif
 
-    #if defined(_REALTIME_MAIN_LIGHT_ON) // (ASG)
-        Light mainLight = GetMainLight(inputData.shadowCoord, inputData.positionWS, shadowMask);
-    #endif
+    // Light mainLight = GetMainLight(inputData.shadowCoord, inputData.positionWS, shadowMask);
 
     #if defined(_SCREEN_SPACE_OCCLUSION)
         AmbientOcclusionFactor aoFactor = GetScreenSpaceAmbientOcclusion(inputData.normalizedScreenSpaceUV);
@@ -877,23 +875,17 @@ half4 UniversalFragmentPBR(InputData inputData, SurfaceData surfaceData)
         surfaceData.occlusion = min(surfaceData.occlusion, aoFactor.indirectAmbientOcclusion);
     #endif
 
-    #if defined(_REALTIME_MAIN_LIGHT_ON) // (ASG)
-        MixRealtimeAndBakedGI(mainLight, inputData.normalWS, inputData.bakedGI);
-    #endif
-
+    // MixRealtimeAndBakedGI(mainLight, inputData.normalWS, inputData.bakedGI);
     half3 giDirectionWS = SafeNormalize(inputData.bakedGI_directionWS);
     half3 gi = GlobalIllumination(brdfData, brdfLightmaps, brdfDataClearCoat, surfaceData.clearCoatMask,
                                      inputData.bakedGI, giDirectionWS, surfaceData.occlusion,
                                      inputData.normalWS, inputData.viewDirectionWS);
     half3 color = half3(0,0,0);
     color += gi;
-
-    #if defined(_REALTIME_MAIN_LIGHT_ON) // (ASG)
-        color += LightingPhysicallyBased(brdfData, brdfDataClearCoat,
-                                         mainLight,
-                                         inputData.normalWS, inputData.viewDirectionWS,
-                                         surfaceData.clearCoatMask, specularHighlightsOff);
-    #endif
+    // color += LightingPhysicallyBased(brdfData, brdfDataClearCoat,
+    //                                  mainLight,
+    //                                  inputData.normalWS, inputData.viewDirectionWS,
+    //                                  surfaceData.clearCoatMask, specularHighlightsOff);
 
 #ifdef _ADDITIONAL_LIGHTS
     uint pixelLightCount = GetAdditionalLightsCount();

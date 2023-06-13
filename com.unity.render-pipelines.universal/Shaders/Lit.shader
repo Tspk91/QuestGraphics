@@ -23,9 +23,6 @@ Shader "Universal Render Pipeline/Lit"
         [ToggleOff] _SpecularHighlights("Specular Highlights", Float) = 1.0
         [ToggleOff] _EnvironmentReflections("Environment Reflections", Float) = 1.0
 
-        // (ASG)
-        [Toggle] _RealtimeMainLight("Real-time Main Light", Float) = 0
-
         _BumpScale("Scale", Float) = 1.0
         _BumpMap("Normal Map", 2D) = "bump" {}
 
@@ -118,7 +115,6 @@ Shader "Universal Render Pipeline/Lit"
             #pragma multi_compile _ _COLOR_TRANSFORM_IN_FORWARD
             // If HDR_GRADING is on, then the tonemap algorithm is encoded in the HDR LUT
             #pragma multi_compile _ _HDR_GRADING _TONEMAP_ACES _TONEMAP_NEUTRAL
-            #pragma shader_feature_local_fragment _REALTIME_MAIN_LIGHT_ON
 
             // -------------------------------------
             // Universal Pipeline keywords
@@ -408,7 +404,6 @@ Shader "Universal Render Pipeline/Lit"
             #pragma multi_compile _ _COLOR_TRANSFORM_IN_FORWARD
             // If HDR_GRADING is on, then the tonemap algorithm is encoded in the HDR LUT
             #pragma multi_compile _ _HDR_GRADING _TONEMAP_ACES _TONEMAP_NEUTRAL
-            #pragma shader_feature_local_fragment _REALTIME_MAIN_LIGHT_ON
 
             // -------------------------------------
             // Universal Pipeline keywords
