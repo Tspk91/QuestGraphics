@@ -11,10 +11,10 @@ namespace UnityEditor.Rendering.Universal
         static bool RejectDrawMode(SceneView.CameraMode cameraMode)
         {
             if (cameraMode.drawMode == DrawCameraMode.ShadowCascades ||
-                cameraMode.drawMode == DrawCameraMode.RenderPaths ||
+                //cameraMode.drawMode == DrawCameraMode.RenderPaths ||
                 cameraMode.drawMode == DrawCameraMode.AlphaChannel ||
-                cameraMode.drawMode == DrawCameraMode.Overdraw ||
-                cameraMode.drawMode == DrawCameraMode.Mipmaps ||
+                //cameraMode.drawMode == DrawCameraMode.Overdraw ||
+                //cameraMode.drawMode == DrawCameraMode.Mipmaps ||
                 cameraMode.drawMode == DrawCameraMode.SpriteMask ||
                 cameraMode.drawMode == DrawCameraMode.DeferredDiffuse ||
                 cameraMode.drawMode == DrawCameraMode.DeferredSpecular ||
