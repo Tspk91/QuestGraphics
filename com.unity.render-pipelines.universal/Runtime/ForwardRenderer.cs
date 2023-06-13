@@ -204,7 +204,6 @@ namespace UnityEngine.Rendering.Universal
             }
             m_OpaqueColor.Init("_CameraOpaqueTexture");
             m_AfterPostProcessColor.Init("_AfterPostProcessTexture");
-            m_ColorGradingLut.Init("_InternalGradingLut");
             m_DepthInfoTexture.Init("_DepthInfoTexture");
             m_TileDepthInfoTexture.Init("_TileDepthInfoTexture");
 
@@ -256,6 +255,7 @@ namespace UnityEngine.Rendering.Universal
             {
                 ConfigureCameraTarget(BuiltinRenderTextureType.CameraTarget, BuiltinRenderTextureType.CameraTarget);
                 AddRenderPasses(ref renderingData);
+                m_RenderOpaqueForwardPass.Setup();
                 EnqueuePass(m_RenderOpaqueForwardPass);
 
                 // TODO: Do we need to inject transparents and skybox when rendering depth only camera? They don't write to depth.
@@ -264,6 +264,8 @@ namespace UnityEngine.Rendering.Universal
                 if (!needTransparencyPass)
                     return;
 #endif
+
+				m_RenderTransparentForwardPass.Setup();
                 EnqueuePass(m_RenderTransparentForwardPass);
                 return;
             }
@@ -291,7 +293,8 @@ namespace UnityEngine.Rendering.Universal
             RenderPassInputSummary renderPassInputs = GetRenderPassInputs(ref renderingData);
 
             // Should apply post-processing after rendering this camera?
-            bool applyPostProcessing = cameraData.postProcessEnabled;
+            // (ASG) And are there any post process effects *actually* active?
+            bool applyPostProcessing = cameraData.postProcessEnabled && !CanSkipSeparatePostProcessPass();
 
             // There's at least a camera in the camera stack that applies post-processing
             bool anyPostProcessing = renderingData.postProcessingEnabled;
@@ -318,7 +321,7 @@ namespace UnityEngine.Rendering.Universal
             // The copying of depth should normally happen after rendering opaques.
             // But if we only require it for post processing or the scene camera then we do it after rendering transparent objects
             m_CopyDepthPass.renderPassEvent = (!requiresDepthTexture && (applyPostProcessing || isSceneViewCamera)) ? RenderPassEvent.AfterRenderingTransparents : RenderPassEvent.AfterRenderingOpaques;
-            createColorTexture |= RequiresIntermediateColorTexture(ref cameraData);
+            createColorTexture |= RequiresIntermediateColorTexture(ref cameraData, applyPostProcessing);
             createColorTexture |= renderPassInputs.requiresColorTexture;
             createColorTexture &= !isPreviewCamera;
 
@@ -409,7 +412,7 @@ namespace UnityEngine.Rendering.Universal
 
             if (generateColorGradingLUT)
             {
-                m_ColorGradingLutPass.Setup(m_ColorGradingLut);
+                m_ColorGradingLutPass.Setup(out m_ColorGradingLut, ref renderingData);
                 EnqueuePass(m_ColorGradingLutPass);
             }
 
@@ -421,7 +424,10 @@ namespace UnityEngine.Rendering.Universal
             if (this.actualRenderingMode == RenderingMode.Deferred)
                 EnqueueDeferred(ref renderingData, requiresDepthPrepass, mainLightShadows, additionalLightShadows);
             else
+			{
+				m_RenderOpaqueForwardPass.Setup(m_ColorGradingLut, generateColorGradingLUT);
                 EnqueuePass(m_RenderOpaqueForwardPass);
+			}
 
             Skybox cameraSkybox;
             cameraData.camera.TryGetComponent<Skybox>(out cameraSkybox);
@@ -464,6 +470,7 @@ namespace UnityEngine.Rendering.Universal
                     EnqueuePass(m_TransparentSettingsPass);
                 }
 
+            	m_RenderTransparentForwardPass.Setup(m_ColorGradingLut, generateColorGradingLUT);
                 EnqueuePass(m_RenderTransparentForwardPass);
             }
             EnqueuePass(m_OnRenderObjectCallbackPass);
@@ -730,13 +737,16 @@ namespace UnityEngine.Rendering.Universal
                    !(SystemInfo.graphicsDeviceType == GraphicsDeviceType.Metal && Application.isMobilePlatform);
         }
 
+        // (ASG) applyPostProcessing: Even if the camera has post processing enabled, we may not be applying it,
+        // if no active effects require a separate post process pass.
         /// <summary>
         /// Checks if the pipeline needs to create a intermediate render texture.
         /// </summary>
         /// <param name="cameraData">CameraData contains all relevant render target information for the camera.</param>
+		/// <param name="applyPostProcessPass">We may not be applying the post process pass, even if the camera has post process enabled.</param>
         /// <seealso cref="CameraData"/>
         /// <returns>Return true if pipeline needs to render to a intermediate render texture.</returns>
-        bool RequiresIntermediateColorTexture(ref CameraData cameraData)
+        bool RequiresIntermediateColorTexture(ref CameraData cameraData, bool applyPostProcessPass)
         {
             // When rendering a camera stack we always create an intermediate render texture to composite camera results.
             // We create it upon rendering the Base camera.
@@ -766,11 +776,13 @@ namespace UnityEngine.Rendering.Universal
                 isCompatibleBackbufferTextureDimension = cameraData.xr.renderTargetDesc.dimension == cameraTargetDescriptor.dimension;
 #endif
 
-            bool requiresBlitForOffscreenCamera = cameraData.postProcessEnabled || cameraData.requiresOpaqueTexture || requiresExplicitMsaaResolve || !cameraData.isDefaultViewport;
+            bool requiresBlitForOffscreenCamera = (cameraData.postProcessEnabled && applyPostProcessPass) || cameraData.requiresOpaqueTexture || requiresExplicitMsaaResolve || !cameraData.isDefaultViewport;
             if (isOffscreenRender)
                 return requiresBlitForOffscreenCamera;
 
-            return requiresBlitForOffscreenCamera || isSceneViewCamera || isScaledRender || cameraData.isHdrEnabled ||
+            bool colorTransformInPost = UniversalRenderPipeline.asset.colorTransformation == ColorTransformation.InPostProcessing;
+
+            return requiresBlitForOffscreenCamera || isSceneViewCamera || isScaledRender || (cameraData.isHdrEnabled && colorTransformInPost) ||
                    !isCompatibleBackbufferTextureDimension || isCapturing || cameraData.requireSrgbConversion;
         }
 
@@ -787,5 +799,50 @@ namespace UnityEngine.Rendering.Universal
             bool msaaDepthResolve = false;
             return supportsDepthCopy || msaaDepthResolve;
         }
+
+        // (ASG)
+        /// <summary>
+        /// Some effects like tonemap and color grading can be applied in the ForwardPass without needing a separate
+        /// post process shader. This function returns whether all active post-processing effects are compatible to be
+        /// run in the ForwardPass.
+        /// </summary>
+        /// <remarks>Expensive, because we re-query the effects stack. Don't run more than once.</remarks>
+        public bool CanSkipSeparatePostProcessPass()
+        {
+            if (UniversalRenderPipeline.asset.colorTransformation != ColorTransformation.InForwardPass)
+            {
+                return false;
+            }
+
+            var stack = VolumeManager.instance.stack;
+
+            // We can skip the post process pass if only forward effects are activated.
+            // Note: This doesn't allocate. I've profiled it, on desktop. (john)
+            foreach (var type in stack.components.Keys)
+            {
+                if (!(
+                    type == typeof(ChannelMixer) ||
+                    type == typeof(ColorAdjustments) ||
+                    type == typeof(ColorCurves) ||
+                    type == typeof(ColorLookup) ||
+                    type == typeof(LiftGammaGain) ||
+                    type == typeof(ShadowsMidtonesHighlights) ||
+                    type == typeof(SplitToning) ||
+                    type == typeof(Tonemapping) ||
+                    type == typeof(WhiteBalance)))
+                {
+                    VolumeComponent component = stack.components[type];
+                    if (component.active && component is IPostProcessComponent post && post.IsActive())
+                    {
+                        // We've enabled a post effect that's not compatible with ForwardPass execution.
+                        return false;
+                    }
+                }
+            }
+
+            // All effects are either disabled or able to run on forward pass.
+            return true;
+        }
+
     }
 }

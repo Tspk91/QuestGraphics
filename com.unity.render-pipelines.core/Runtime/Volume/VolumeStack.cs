@@ -12,7 +12,7 @@ namespace UnityEngine.Rendering
     public sealed class VolumeStack : IDisposable
     {
         // Holds the state of _all_ component types you can possibly add on volumes
-        internal Dictionary<Type, VolumeComponent> components;
+        public Dictionary<Type, VolumeComponent> components;
 
         internal VolumeStack()
         {
@@ -57,6 +57,24 @@ namespace UnityEngine.Rendering
         {
             components.TryGetValue(type, out var comp);
             return comp;
+        }
+
+        /// <summary>
+        /// A custom hashing function that Unity uses to compare the state of parameters.
+        /// </summary>
+        /// <returns>A computed hash code for the current instance.</returns>
+        public override int GetHashCode()
+        {
+            unchecked
+            {
+                int hash = 17;
+                foreach (var component in VolumeManager.instance.stack.components.Values)
+                {
+                    hash = hash * 23 + component.GetHashCode();
+                }
+
+                return hash;
+            }
         }
 
         /// <summary>

@@ -1,3 +1,20 @@
+﻿// (ASG) Include a few post processing functions from a file. But only the functions.
+#define UNIVERSAL_POSTPROCESSING_COMMON_ONLY_INCLUDE_UTILS
+#include "Packages/com.unity.render-pipelines.universal/Shaders/PostProcessing/Common.hlsl"
+#include "Packages/com.unity.render-pipelines.universal/Shaders/Utils/AsgColorPainting.hlsl"
+
+// (ASG) Used when tonemapping and color grading is done in the forward pass.
+#ifdef _COLOR_TRANSFORM_IN_FORWARD
+
+float4 _Lut_Params;
+float4 _UserLut_Params;
+TEXTURE2D(_UserLut);
+TEXTURE2D(_InternalLut);
+SAMPLER(sampler_LinearClamp);
+float _TestParam;
+
+#endif
+
 void BuildInputData(Varyings input, SurfaceDescription surfaceDescription, out InputData inputData)
 {
     inputData.positionWS = input.positionWS;
@@ -32,6 +49,22 @@ void BuildInputData(Varyings input, SurfaceDescription surfaceDescription, out I
     inputData.bakedGI = SAMPLE_GI(input.lightmapUV, input.sh, inputData.normalWS);
     inputData.normalizedScreenSpaceUV = GetNormalizedScreenSpaceUV(input.positionCS);
     inputData.shadowMask = SAMPLE_SHADOWMASK(input.lightmapUV);
+
+#ifdef LIGHTMAP_ON
+    half2 uv = input.lightmapUV;
+
+    // TODO(fixforship): This adds an *additional* unnecessary texture fetch to the shader. We're already sampling
+    // the directional lightmap in the SAMPLE_GI function, so we should sample it first, and feed it
+    // in, instead.
+    real4 direction_raw = SAMPLE_TEXTURE2D(unity_LightmapInd, samplerunity_Lightmap, uv);
+    half3 direction = (direction_raw.xyz - 0.5) * 2; // convert from [0,1] to [-1,1]
+    inputData.bakedGI_directionWS = direction;
+
+#else // LIGHTMAP_ON
+
+    inputData.bakedGI_directionWS = half3(0,0,0);
+
+#endif
 }
 
 PackedVaryings vert(Attributes input)
@@ -91,5 +124,15 @@ half4 frag(PackedVaryings packedInput) : SV_TARGET
     half4 color = UniversalFragmentPBR(inputData, surface);
 
     color.rgb = MixFog(color.rgb, inputData.fogCoord);
+
+    // (ASG) Add tonemapping and color grading in forward pass.
+    // This uses the same color grading function as the post processing shader.
+#ifdef _COLOR_TRANSFORM_IN_FORWARD
+    color.rgb = ApplyColorGrading(color.rgb, _Lut_Params.w, TEXTURE2D_ARGS(_InternalLut, sampler_LinearClamp), _Lut_Params.xyz, TEXTURE2D_ARGS(_UserLut, sampler_LinearClamp), _UserLut_Params.xyz, _UserLut_Params.w);
+#endif
+
+    // (ASG) After SDR transformation, apply custom vertex painting blend.
+    color.rgb = ApplyVertexColorBlend(color.rgb, SRGBToLinear(unpacked.color));
+
     return color;
 }

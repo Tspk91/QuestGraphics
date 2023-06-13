@@ -1,7 +1,9 @@
 #ifndef UNIVERSAL_FORWARD_LIT_PASS_INCLUDED
 #define UNIVERSAL_FORWARD_LIT_PASS_INCLUDED
 
+#include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Color.hlsl"
 #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
+#include "Packages/com.unity.render-pipelines.universal/Shaders/Utils/AsgColorPainting.hlsl"
 
 // GLES2 has limited amount of interpolators
 #if defined(_PARALLAXMAP) && !defined(SHADER_API_GLES)
@@ -14,6 +16,10 @@
 
 // keep this file in sync with LitGBufferPass.hlsl
 
+// (ASG) Include a few post processing functions from a file. But only the functions.
+#define UNIVERSAL_POSTPROCESSING_COMMON_ONLY_INCLUDE_UTILS
+#include "Packages/com.unity.render-pipelines.universal/Shaders/PostProcessing/Common.hlsl"
+
 struct Attributes
 {
     float4 positionOS   : POSITION;
@@ -21,6 +27,7 @@ struct Attributes
     float4 tangentOS    : TANGENT;
     float2 texcoord     : TEXCOORD0;
     float2 lightmapUV   : TEXCOORD1;
+    float4 color        : COLOR0;
     UNITY_VERTEX_INPUT_INSTANCE_ID
 };
 
@@ -50,6 +57,7 @@ struct Varyings
 #endif
 
     float4 positionCS               : SV_POSITION;
+    float4 color                    : COLOR0;
     UNITY_VERTEX_INPUT_INSTANCE_ID
     UNITY_VERTEX_OUTPUT_STEREO
 };
@@ -87,6 +95,24 @@ void InitializeInputData(Varyings input, half3 normalTS, out InputData inputData
     inputData.bakedGI = SAMPLE_GI(input.lightmapUV, input.vertexSH, inputData.normalWS);
     inputData.normalizedScreenSpaceUV = GetNormalizedScreenSpaceUV(input.positionCS);
     inputData.shadowMask = SAMPLE_SHADOWMASK(input.lightmapUV);
+
+    // Get the direction of the lightmap lighting (scale is equal to the 'directionality')
+    #ifdef LIGHTMAP_ON
+
+    half2 uv = input.lightmapUV;
+
+    // TODO(fixforship): This adds an *additional* unnecessary texture fetch to the shader. We're already sampling
+    // the directional lightmap in the SAMPLE_GI function, so we should sample it first, and feed it
+    // in, instead.
+    real4 direction_raw = SAMPLE_TEXTURE2D(unity_LightmapInd, samplerunity_Lightmap, uv);
+    half3 direction = (direction_raw.xyz - 0.5) * 2; // convert from [0,1] to [-1,1]
+    inputData.bakedGI_directionWS = direction;
+
+    #else // LIGHTMAP_ON
+
+    inputData.bakedGI_directionWS = half3(0,0,0);
+
+    #endif
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -145,6 +171,7 @@ Varyings LitPassVertex(Attributes input)
 #endif
 
     output.positionCS = vertexInput.positionCS;
+    output.color = input.color;
 
     return output;
 }
@@ -173,7 +200,23 @@ half4 LitPassFragment(Varyings input) : SV_Target
     half4 color = UniversalFragmentPBR(inputData, surfaceData);
 
     color.rgb = MixFog(color.rgb, inputData.fogCoord);
+
+    // (ASG) Add tonemapping and color grading in forward pass.
+    // This uses the same color grading function as the post processing shader.
+#ifdef _COLOR_TRANSFORM_IN_FORWARD
+    color.rgb = ApplyColorGrading(color.rgb, _Lut_Params.w, TEXTURE2D_ARGS(_InternalLut, sampler_LinearClamp), _Lut_Params.xyz, TEXTURE2D_ARGS(_UserLut, sampler_LinearClamp), _UserLut_Params.xyz, _UserLut_Params.w);
+#endif
+
+
+    color.rgb = ApplyVertexColorBlend(color.rgb, SRGBToLinear(input.color));
+
     color.a = OutputAlpha(color.a, _Surface);
+
+    // Return linear color. Conversion to sRGB happens automatically through the sRGB target texture format.
+    // If the target does not have sRGB format, sRGB conversion happens during the final blit pass, or post process.
+
+    // (ASG) Note: sRGB conversion is better to be done automatically hardware, so that filtering / msaa
+    // averaging is done properly in linear space, rather than in sRGB space.
 
     return color;
 }

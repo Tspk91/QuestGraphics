@@ -15,6 +15,10 @@ float4 TransformFullscreenMesh(half3 positionOS)
     return mul(_FullscreenProjMat, half4(positionOS, 1));
 }
 
+// (ASG) Allow including this file, with only the functions.
+// Note that due to the line 1 pragma, you can only include this file once as utils or with attributes.
+#ifndef UNIVERSAL_POSTPROCESSING_COMMON_ONLY_INCLUDE_UTILS
+
 Varyings VertFullscreenMesh(Attributes input)
 {
     Varyings output;
@@ -31,6 +35,7 @@ Varyings VertFullscreenMesh(Attributes input)
     return output;
 }
 
+
 // ----------------------------------------------------------------------------------
 // Samplers
 
@@ -38,6 +43,8 @@ SAMPLER(sampler_LinearClamp);
 SAMPLER(sampler_LinearRepeat);
 SAMPLER(sampler_PointClamp);
 SAMPLER(sampler_PointRepeat);
+
+#endif // UNIVERSAL_POSTPROCESSING_COMMON_ONLY_INCLUDE_UTILS
 
 // ----------------------------------------------------------------------------------
 // Utility functions
@@ -81,7 +88,7 @@ half3 ApplyTonemap(half3 input)
     return saturate(input);
 }
 
-half3 ApplyColorGrading(half3 input, float postExposure, TEXTURE2D_PARAM(lutTex, lutSampler), float3 lutParams, TEXTURE2D_PARAM(userLutTex, userLutSampler), float3 userLutParams, float userLutContrib)
+half3 ApplyColorGrading(half3 input, float postExposure, TEXTURE2D_PARAM(lutTex, lutSampler), float3 lutParams)
 {
     // Artist request to fine tune exposure in post without affecting bloom, dof etc
     input *= postExposure;
@@ -93,16 +100,6 @@ half3 ApplyColorGrading(half3 input, float postExposure, TEXTURE2D_PARAM(lutTex,
     {
         float3 inputLutSpace = saturate(LinearToLogC(input)); // LUT space is in LogC
         input = ApplyLut2D(TEXTURE2D_ARGS(lutTex, lutSampler), inputLutSpace, lutParams);
-
-        UNITY_BRANCH
-        if (userLutContrib > 0.0)
-        {
-            input = saturate(input);
-            input.rgb = LinearToSRGB(input.rgb); // In LDR do the lookup in sRGB for the user LUT
-            half3 outLut = ApplyLut2D(TEXTURE2D_ARGS(userLutTex, userLutSampler), input, userLutParams);
-            input = lerp(input, outLut, userLutContrib);
-            input.rgb = SRGBToLinear(input.rgb);
-        }
     }
 
     // LDR Grading:
@@ -112,16 +109,6 @@ half3 ApplyColorGrading(half3 input, float postExposure, TEXTURE2D_PARAM(lutTex,
     #else
     {
         input = ApplyTonemap(input);
-
-        UNITY_BRANCH
-        if (userLutContrib > 0.0)
-        {
-            input.rgb = LinearToSRGB(input.rgb); // In LDR do the lookup in sRGB for the user LUT
-            half3 outLut = ApplyLut2D(TEXTURE2D_ARGS(userLutTex, userLutSampler), input, userLutParams);
-            input = lerp(input, outLut, userLutContrib);
-            input.rgb = SRGBToLinear(input.rgb);
-        }
-
         input = ApplyLut2D(TEXTURE2D_ARGS(lutTex, lutSampler), input, lutParams);
     }
     #endif
