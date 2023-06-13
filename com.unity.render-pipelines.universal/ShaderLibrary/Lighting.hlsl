@@ -602,7 +602,11 @@ half3 GlossyEnvironmentReflection(half3 reflectVector, half perceptualRoughness,
     return irradiance * occlusion;
 #endif // GLOSSY_REFLECTIONS
 
-    return _GlossyEnvironmentColor.rgb * occlusion;
+    // (ASG) Disable ambient colored reflection when environment reflections are off. We do this because the ambient environment color comes from the skybox light,
+    // which is completely unsuitable for objects indoor.
+    // (ASG) There should be no environment reflected light on lightmapped objects. It's already included in the bake.
+    return half3(0,0,0);
+    //return _GlossyEnvironmentColor.rgb * occlusion;
 }
 
 half3 SubtractDirectMainLightFromLightmap(Light mainLight, half3 normalWS, half3 bakedGI)
@@ -633,8 +637,13 @@ half3 SubtractDirectMainLightFromLightmap(Light mainLight, half3 normalWS, half3
     return min(bakedGI, realtimeShadow);
 }
 
-half3 GlobalIllumination(BRDFData brdfData, BRDFData brdfDataClearCoat, float clearCoatMask,
-    half3 bakedGI, half occlusion,
+// (ASG) Calculates the GI by treating GI as simply another light source we pass into the DirectBRDF.
+// This gives us nice specular contribution from the baked lights! Very helpful in VR for making an object appear grounded.
+// Note: brdfDataForLightmaps contains the adjust BRDF used for interpreting the lightmapped lighting. See UniversalFragmentPBR.
+//       We don't want to adjust the brdfData itself, otherwise it will blur metallic reflections based on baked lighting, creating
+//       a 'puddle' effect.
+half3 GlobalIllumination(BRDFData brdfData, BRDFData brdfDataForLightmaps, BRDFData brdfDataClearCoat, float clearCoatMask,
+    half3 bakedGI, half3 bakedGIDirectionWS, half occlusion,
     half3 normalWS, half3 viewDirectionWS)
 {
     half3 reflectVector = reflect(-viewDirectionWS, normalWS);
@@ -642,9 +651,18 @@ half3 GlobalIllumination(BRDFData brdfData, BRDFData brdfDataClearCoat, float cl
     half fresnelTerm = Pow4(1.0 - NoV);
 
     half3 indirectDiffuse = bakedGI * occlusion;
+
     half3 indirectSpecular = GlossyEnvironmentReflection(reflectVector, brdfData.perceptualRoughness, occlusion);
 
+// (ASG) For objects with lightmaps, calculate the color by treating the GI light and direction as a normal BRDF direct light.
+// This gives us specular highlights for baked lighting.
+#if defined(LIGHTMAP_ON)
+    half3 color = DirectBDRF(brdfDataForLightmaps, normalWS, bakedGIDirectionWS, viewDirectionWS) * indirectDiffuse; // baked color
+    color += indirectSpecular * EnvironmentBRDFSpecular(brdfData, fresnelTerm);
+#else
     half3 color = EnvironmentBRDF(brdfData, indirectDiffuse, indirectSpecular, fresnelTerm);
+#endif
+
 
 #if defined(_CLEARCOAT) || defined(_CLEARCOATMAP)
     half3 coatIndirectSpecular = GlossyEnvironmentReflection(reflectVector, brdfDataClearCoat.perceptualRoughness, occlusion);
@@ -665,7 +683,7 @@ half3 GlobalIllumination(BRDFData brdfData, BRDFData brdfDataClearCoat, float cl
 half3 GlobalIllumination(BRDFData brdfData, half3 bakedGI, half occlusion, half3 normalWS, half3 viewDirectionWS)
 {
     const BRDFData noClearCoat = (BRDFData)0;
-    return GlobalIllumination(brdfData, noClearCoat, 0.0, bakedGI, occlusion, normalWS, viewDirectionWS);
+    return GlobalIllumination(brdfData, brdfData, noClearCoat, 0.0, bakedGI, half3(0,0,0), occlusion, normalWS, viewDirectionWS);
 }
 
 void MixRealtimeAndBakedGI(inout Light light, half3 normalWS, inout half3 bakedGI)
@@ -811,6 +829,29 @@ half4 UniversalFragmentPBR(InputData inputData, SurfaceData surfaceData)
     // NOTE: can modify alpha
     InitializeBRDFData(surfaceData.albedo, surfaceData.metallic, surfaceData.specular, surfaceData.smoothness, surfaceData.alpha, brdfData);
 
+// (ASG)
+    BRDFData brdfLightmaps;
+#if defined(LIGHTMAP_ON)
+    // For baked lighting, decrease smoothness as the directionality of the light decreases. This approximates the specular highlight
+    // spreading and scattering, as the light becomes less directional. Without this, even shadowed areas look shiny.
+    // This is recommended by: https://media.contentapi.ea.com/content/dam/eacom/frostbite/files/gdc2018-precomputedgiobalilluminationinfrostbite.pdf
+    // Although, here we do not apply the sqrt to the falloff. Instead we square it, which seems to produce a closer image to the blender groundtruth.
+    // The range remap makes sure that surfaces in perfectly direct light (directionality > .9) remain their true specular (directionality rarely reaches a perfect 1).
+    // See this Github discussion for more information: https://github.com/AStrangerGravity/Graphics/pull/2#discussion_r459731172
+
+    // Worth optimizing more if we become ALU bound. Just make sure to do a before/after.
+    // This smoothness falloff has been carefully tested to look good compared to the Blender render.
+    half physicalSmoothness = 1 - PerceptualSmoothnessToRoughness(surfaceData.smoothness);
+    half directionality_squared = dot(inputData.bakedGI_directionWS, inputData.bakedGI_directionWS); // The directionality is encoded as the length of the GI direction vector.
+    half adjustedSmoothness = physicalSmoothness * RangeRemap(0.0, .9 * .9, directionality_squared);
+    half perceptualAdjustedSmoothness = 1 - RoughnessToPerceptualRoughness(1 - adjustedSmoothness);
+
+    InitializeBRDFData(surfaceData.albedo, surfaceData.metallic, surfaceData.specular, perceptualAdjustedSmoothness, surfaceData.alpha, brdfLightmaps);
+#else
+    // Don't change smoothness for non-lightmapped objects.
+    brdfLightmaps = brdfData;
+#endif
+
     BRDFData brdfDataClearCoat = (BRDFData)0;
 #if defined(_CLEARCOAT) || defined(_CLEARCOATMAP)
     // base brdfData is modified here, rely on the compiler to eliminate dead computation by InitializeBRDFData()
@@ -826,7 +867,9 @@ half4 UniversalFragmentPBR(InputData inputData, SurfaceData surfaceData)
     half4 shadowMask = half4(1, 1, 1, 1);
 #endif
 
-    Light mainLight = GetMainLight(inputData.shadowCoord, inputData.positionWS, shadowMask);
+    #if defined(_REALTIME_MAIN_LIGHT_ON) // (ASG)
+        Light mainLight = GetMainLight(inputData.shadowCoord, inputData.positionWS, shadowMask);
+    #endif
 
     #if defined(_SCREEN_SPACE_OCCLUSION)
         AmbientOcclusionFactor aoFactor = GetScreenSpaceAmbientOcclusion(inputData.normalizedScreenSpaceUV);
@@ -834,14 +877,23 @@ half4 UniversalFragmentPBR(InputData inputData, SurfaceData surfaceData)
         surfaceData.occlusion = min(surfaceData.occlusion, aoFactor.indirectAmbientOcclusion);
     #endif
 
-    MixRealtimeAndBakedGI(mainLight, inputData.normalWS, inputData.bakedGI);
-    half3 color = GlobalIllumination(brdfData, brdfDataClearCoat, surfaceData.clearCoatMask,
-                                     inputData.bakedGI, surfaceData.occlusion,
+    #if defined(_REALTIME_MAIN_LIGHT_ON) // (ASG)
+        MixRealtimeAndBakedGI(mainLight, inputData.normalWS, inputData.bakedGI);
+    #endif
+
+    half3 giDirectionWS = SafeNormalize(inputData.bakedGI_directionWS);
+    half3 gi = GlobalIllumination(brdfData, brdfLightmaps, brdfDataClearCoat, surfaceData.clearCoatMask,
+                                     inputData.bakedGI, giDirectionWS, surfaceData.occlusion,
                                      inputData.normalWS, inputData.viewDirectionWS);
-    color += LightingPhysicallyBased(brdfData, brdfDataClearCoat,
-                                     mainLight,
-                                     inputData.normalWS, inputData.viewDirectionWS,
-                                     surfaceData.clearCoatMask, specularHighlightsOff);
+    half3 color = half3(0,0,0);
+    color += gi;
+
+    #if defined(_REALTIME_MAIN_LIGHT_ON) // (ASG)
+        color += LightingPhysicallyBased(brdfData, brdfDataClearCoat,
+                                         mainLight,
+                                         inputData.normalWS, inputData.viewDirectionWS,
+                                         surfaceData.clearCoatMask, specularHighlightsOff);
+    #endif
 
 #ifdef _ADDITIONAL_LIGHTS
     uint pixelLightCount = GetAdditionalLightsCount();
@@ -864,6 +916,7 @@ half4 UniversalFragmentPBR(InputData inputData, SurfaceData surfaceData)
 
     color += surfaceData.emission;
 
+    //return half4(color, 1) * .01 + half4(gi, 1);
     return half4(color, surfaceData.alpha);
 }
 

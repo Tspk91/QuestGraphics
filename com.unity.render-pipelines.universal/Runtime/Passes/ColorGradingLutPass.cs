@@ -14,7 +14,14 @@ namespace UnityEngine.Rendering.Universal.Internal
         readonly GraphicsFormat m_HdrLutFormat;
         readonly GraphicsFormat m_LdrLutFormat;
 
+        RenderTextureDescriptor lutTextureDescriptor;
+        RenderTexture lutTexture;
         RenderTargetHandle m_InternalLut;
+
+        // Store the last and current hash of all of the values in the post processing stack.
+        // This lets us detect changes in postprocessing, and only re-render the lut when they change.
+        private int lastPostProcessingValuesHash;
+        private int currentPostProcessingValuesHash;
 
         public ColorGradingLutPass(RenderPassEvent evt, PostProcessData data)
         {
@@ -26,7 +33,8 @@ namespace UnityEngine.Rendering.Universal.Internal
             {
                 if (shader == null)
                 {
-                    Debug.LogError($"Missing shader. {GetType().DeclaringType.Name} render pass will not execute. Check for missing reference in the renderer resources.");
+                    Debug.LogError(
+                        $"Missing shader. {GetType().DeclaringType.Name} render pass will not execute. Check for missing reference in the renderer resources.");
                     return null;
                 }
 
@@ -52,14 +60,61 @@ namespace UnityEngine.Rendering.Universal.Internal
             m_LdrLutFormat = GraphicsFormat.R8G8B8A8_UNorm;
         }
 
-        public void Setup(in RenderTargetHandle internalLut)
+        public void Setup(out RenderTargetHandle internalLut, ref RenderingData renderingData)
         {
-            m_InternalLut = internalLut;
+            lastPostProcessingValuesHash = currentPostProcessingValuesHash;
+            currentPostProcessingValuesHash = VolumeManager.instance.stack.GetHashCode();
+
+            ref var postProcessingData = ref renderingData.postProcessingData;
+            bool hdr = postProcessingData.gradingMode == ColorGradingMode.HighDynamicRange;
+            int lutHeight = postProcessingData.lutSize;
+            int lutWidth = lutHeight * lutHeight;
+            var format = hdr ? m_HdrLutFormat : m_LdrLutFormat;
+
+            // If the render texture description for the lut has changed, recreate it.
+            // This might happen if you change the LWRP settings.
+            if (lutWidth != lutTextureDescriptor.width || lutHeight != lutTextureDescriptor.height ||
+                format != lutTextureDescriptor.graphicsFormat || lutTexture == null)
+            {
+                lutTextureDescriptor = new RenderTextureDescriptor(lutWidth, lutHeight, format, 0);
+                lutTextureDescriptor.vrUsage = VRTextureUsage.None; // We only need one for both eyes in VR
+
+                if (lutTexture != null)
+                {
+                    lutTexture.Release();
+                }
+
+                lutTexture = new RenderTexture(lutTextureDescriptor);
+                lutTexture.Create();
+
+                RenderTargetIdentifier id = new RenderTargetIdentifier(lutTexture);
+                m_InternalLut = new RenderTargetHandle(id);
+            }
+
+            internalLut = m_InternalLut;
+        }
+
+        /// <inheritdoc />
+        public override void Configure(CommandBuffer cmd, RenderTextureDescriptor cameraTextureDescriptor)
+        {
+            if (currentPostProcessingValuesHash != lastPostProcessingValuesHash)
+            {
+                // (ASG) This is required, otherwise this pass has the default camera attachment, and the code in
+                // ScriptableRenderer.Execute enables XR mode for this pass (when in forward color grading mode).
+                // (John): I believe this is a bug in URP, and this should be set.
+                ConfigureTarget(m_InternalLut.Identifier());
+            }
         }
 
         /// <inheritdoc/>
         public override void Execute(ScriptableRenderContext context, ref RenderingData renderingData)
         {
+            // Skip lut rendering if the post processing value hashes haven't changed.
+            if (currentPostProcessingValuesHash == lastPostProcessingValuesHash)
+            {
+                return;
+            }
+
             var cmd = CommandBufferPool.Get();
             using (new ProfilingScope(cmd, ProfilingSampler.Get(URPProfileId.ColorGradingLUT)))
             {
@@ -80,11 +135,7 @@ namespace UnityEngine.Rendering.Universal.Internal
                 // Prepare texture & material
                 int lutHeight = postProcessingData.lutSize;
                 int lutWidth = lutHeight * lutHeight;
-                var format = hdr ? m_HdrLutFormat : m_LdrLutFormat;
                 var material = hdr ? m_LutBuilderHdr : m_LutBuilderLdr;
-                var desc = new RenderTextureDescriptor(lutWidth, lutHeight, format, 0);
-                desc.vrUsage = VRTextureUsage.None; // We only need one for both eyes in VR
-                cmd.GetTemporaryRT(m_InternalLut.id, desc, FilterMode.Bilinear);
 
                 // Prepare data
                 var lmsColorBalance = ColorUtils.ColorBalanceToLMSCoeffs(whiteBalance.temperature.value, whiteBalance.tint.value);
@@ -167,7 +218,7 @@ namespace UnityEngine.Rendering.Universal.Internal
                 renderingData.cameraData.xr.StopSinglePass(cmd);
 
                 // Render the lut
-                Blit(cmd, m_InternalLut.id, m_InternalLut.id, material);
+                Blit(cmd, m_InternalLut.Identifier(), m_InternalLut.Identifier(), material);
 
                 renderingData.cameraData.xr.StartSinglePass(cmd);
             }
@@ -176,16 +227,15 @@ namespace UnityEngine.Rendering.Universal.Internal
             CommandBufferPool.Release(cmd);
         }
 
-        /// <inheritdoc/>
-        public override void OnFinishCameraStackRendering(CommandBuffer cmd)
-        {
-            cmd.ReleaseTemporaryRT(m_InternalLut.id);
-        }
-
         public void Cleanup()
         {
             CoreUtils.Destroy(m_LutBuilderLdr);
             CoreUtils.Destroy(m_LutBuilderHdr);
+
+            if (lutTexture != null)
+            {
+                lutTexture.Release();
+            }
         }
 
         // Precomputed shader ids to same some CPU cycles (mostly affects mobile)

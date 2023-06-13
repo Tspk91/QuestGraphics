@@ -53,6 +53,9 @@ Shader "Universal Render Pipeline/Unlit"
 
             #include "UnlitInput.hlsl"
 
+			// (ASG) Support fade to black.
+			uniform float _FadeToBlack;
+
             struct Attributes
             {
                 float4 positionOS       : POSITION;
@@ -102,6 +105,9 @@ Shader "Universal Render Pipeline/Unlit"
 #endif
 
                 color = MixFog(color, input.fogCoord);
+
+				// (ASG) Support fade to black.
+				color.rgb *= _FadeToBlack;
 
                 return half4(color, alpha);
             }
@@ -203,6 +209,9 @@ Shader "Universal Render Pipeline/Unlit"
                 UNITY_VERTEX_OUTPUT_STEREO
             };
 
+			// (ASG) Support fade to black.
+			uniform float _FadeToBlack;
+
             Varyings vert(Attributes input)
             {
                 Varyings output = (Varyings)0;
@@ -236,6 +245,9 @@ Shader "Universal Render Pipeline/Unlit"
 
                 color = MixFog(color, input.fogCoord);
                 alpha = OutputAlpha(alpha, _Surface);
+
+				// (ASG) Support fade to black.
+				color.rgb *= _FadeToBlack;
 
                 return half4(color, alpha);
             }

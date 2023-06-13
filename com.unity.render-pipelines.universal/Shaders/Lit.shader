@@ -23,6 +23,10 @@ Shader "Universal Render Pipeline/Lit"
         [ToggleOff] _SpecularHighlights("Specular Highlights", Float) = 1.0
         [ToggleOff] _EnvironmentReflections("Environment Reflections", Float) = 1.0
 
+        // (ASG)
+        [Toggle] _RealtimeMainLight("Real-time Main Light", Float) = 0
+        [Toggle] _OcclusionMapCombined("Combined Metallic-Occlusion Map", Float) = 0
+
         _BumpScale("Scale", Float) = 1.0
         _BumpMap("Normal Map", 2D) = "bump" {}
 
@@ -87,6 +91,9 @@ Shader "Universal Render Pipeline/Lit"
             Name "ForwardLit"
             Tags{"LightMode" = "UniversalForward"}
 
+            // (ASG) Enable AlphaToMask when _AlphaClip (set by material) is on.
+            AlphaToMask[_AlphaClip]
+
             Blend[_SrcBlend][_DstBlend]
             ZWrite[_ZWrite]
             Cull[_Cull]
@@ -110,6 +117,13 @@ Shader "Universal Render Pipeline/Lit"
             #pragma shader_feature_local_fragment _ENVIRONMENTREFLECTIONS_OFF
             #pragma shader_feature_local_fragment _SPECULAR_SETUP
             #pragma shader_feature_local _RECEIVE_SHADOWS_OFF
+
+            // (ASG)
+            #pragma multi_compile _ _COLOR_TRANSFORM_IN_FORWARD
+            // If HDR_GRADING is on, then the tonemap algorithm is encoded in the HDR LUT
+            #pragma multi_compile _ _HDR_GRADING _TONEMAP_ACES _TONEMAP_NEUTRAL
+            #pragma shader_feature_local_fragment _REALTIME_MAIN_LIGHT_ON
+            #pragma shader_feature_local_fragment _OCCLUSION_MAP_COMBINED_ON
 
             // -------------------------------------
             // Universal Pipeline keywords
@@ -366,6 +380,9 @@ Shader "Universal Render Pipeline/Lit"
             Name "ForwardLit"
             Tags{"LightMode" = "UniversalForward"}
 
+            // (ASG) Enable AlphaToMask when _AlphaClip (set by material) is on.
+            AlphaToMask[_AlphaClip]
+
             Blend[_SrcBlend][_DstBlend]
             ZWrite[_ZWrite]
             Cull[_Cull]
@@ -394,6 +411,13 @@ Shader "Universal Render Pipeline/Lit"
             #pragma shader_feature_local_fragment _ENVIRONMENTREFLECTIONS_OFF
             #pragma shader_feature_local_fragment _SPECULAR_SETUP
             #pragma shader_feature_local _RECEIVE_SHADOWS_OFF
+
+            // (ASG)
+            #pragma multi_compile _ _COLOR_TRANSFORM_IN_FORWARD
+            // If HDR_GRADING is on, then the tonemap algorithm is encoded in the HDR LUT
+            #pragma multi_compile _ _HDR_GRADING _TONEMAP_ACES _TONEMAP_NEUTRAL
+            #pragma shader_feature_local_fragment _REALTIME_MAIN_LIGHT_ON
+            #pragma shader_feature_local_fragment _OCCLUSION_MAP_COMBINED_ON
 
             // -------------------------------------
             // Universal Pipeline keywords

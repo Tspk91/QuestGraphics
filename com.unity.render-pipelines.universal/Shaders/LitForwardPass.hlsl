@@ -1,6 +1,7 @@
 #ifndef UNIVERSAL_FORWARD_LIT_PASS_INCLUDED
 #define UNIVERSAL_FORWARD_LIT_PASS_INCLUDED
 
+#include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Color.hlsl"
 #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
 
 // GLES2 has limited amount of interpolators
@@ -13,6 +14,10 @@
 #endif
 
 // keep this file in sync with LitGBufferPass.hlsl
+
+// (ASG) Include a few post processing functions from a file. But only the functions.
+#define UNIVERSAL_POSTPROCESSING_COMMON_ONLY_INCLUDE_UTILS
+#include "Packages/com.unity.render-pipelines.universal/Shaders/PostProcessing/Common.hlsl"
 
 struct Attributes
 {
@@ -84,9 +89,33 @@ void InitializeInputData(Varyings input, half3 normalTS, out InputData inputData
 
     inputData.fogCoord = input.fogFactorAndVertexLight.x;
     inputData.vertexLighting = input.fogFactorAndVertexLight.yzw;
-    inputData.bakedGI = SAMPLE_GI(input.lightmapUV, input.vertexSH, inputData.normalWS);
+    // inputData.bakedGI = SAMPLE_GI(input.lightmapUV, input.vertexSH, inputData.normalWS); // (ASG) moved below.
     inputData.normalizedScreenSpaceUV = GetNormalizedScreenSpaceUV(input.positionCS);
     inputData.shadowMask = SAMPLE_SHADOWMASK(input.lightmapUV);
+
+
+#if defined(LIGHTMAP_ON)
+    // (ASG) This is an 'inlined' version of SampleLightmap() that removes some unnecessary branching, computation, and
+    // texture samples. We assume that 1. directional lightmaps are in use, and 2. lightmaps are RGBM encoded.
+
+    half2 uv = input.lightmapUV;
+
+    // Get the baked illuminance.
+    half4 decodeInstructions = half4(LIGHTMAP_HDR_MULTIPLIER, LIGHTMAP_HDR_EXPONENT, 0.0h, 0.0h);
+    real4 encodedIlluminance = SAMPLE_TEXTURE2D(unity_Lightmap, samplerunity_Lightmap, uv);
+    inputData.bakedGI = DecodeLightmap(encodedIlluminance, decodeInstructions);
+
+    // Get the direction of the lightmap lighting (scale is equal to the 'directionality')
+    real4 direction_raw = SAMPLE_TEXTURE2D(unity_LightmapInd, samplerunity_Lightmap, uv);
+    half3 direction = (direction_raw.xyz - 0.5) * 2; // convert from [0,1] to [-1,1]
+    inputData.bakedGI_directionWS = direction;
+
+#else // LIGHTMAP_ON
+
+    inputData.bakedGI = SampleSHPixel(input.vertexSH, inputData.normalWS);
+    inputData.bakedGI_directionWS = half3(0,0,0);
+
+#endif
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -109,7 +138,9 @@ Varyings LitPassVertex(Attributes input)
     // also required for per-vertex lighting and SH evaluation
     VertexNormalInputs normalInput = GetVertexNormalInputs(input.normalOS, input.tangentOS);
 
-    half3 viewDirWS = GetWorldSpaceViewDir(vertexInput.positionWS);
+    // (ASG) Assume perspective projection to prevent branching.
+    //half3 viewDirWS = GetWorldSpaceViewDir(vertexInput.positionWS);
+    half3 viewDirWS = GetCurrentViewPosition() - vertexInput.positionWS;
     half3 vertexLight = VertexLighting(vertexInput.positionWS, normalInput.normalWS);
     half fogFactor = ComputeFogFactor(vertexInput.positionCS.z);
 
@@ -173,7 +204,22 @@ half4 LitPassFragment(Varyings input) : SV_Target
     half4 color = UniversalFragmentPBR(inputData, surfaceData);
 
     color.rgb = MixFog(color.rgb, inputData.fogCoord);
+
+    color.rgb *= _FadeToBlack; // Fading happens in linear color to fade bright spots last
+
+    // (ASG) Add tonemapping and color grading in forward pass.
+    // This uses the same color grading function as the post processing shader.
+#ifdef _COLOR_TRANSFORM_IN_FORWARD
+    color.rgb = ApplyColorGrading(color.rgb, _Lut_Params.w, TEXTURE2D_ARGS(_InternalLut, sampler_LinearClamp), _Lut_Params.xyz);
+#endif
+
     color.a = OutputAlpha(color.a, _Surface);
+
+    // Return linear color. Conversion to sRGB happens automatically through the sRGB target texture format.
+    // If the target does not have sRGB format, sRGB conversion happens during the final blit pass, or post process.
+
+    // (ASG) Note: sRGB conversion is better to be done automatically hardware, so that filtering / msaa
+    // averaging is done properly in linear space, rather than in sRGB space.
 
     return color;
 }
