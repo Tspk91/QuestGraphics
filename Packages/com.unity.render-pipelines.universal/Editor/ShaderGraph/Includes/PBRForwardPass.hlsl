@@ -70,13 +70,18 @@ half4 frag(PackedVaryings packedInput) : SV_TARGET
     UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(unpacked);
     SurfaceDescription surfaceDescription = BuildSurfaceDescription(unpacked);
 
-    #if _ALPHATEST_ON
-        half alpha = surfaceDescription.Alpha;
-        clip(alpha - surfaceDescription.AlphaClipThreshold);
-    #elif _SURFACE_TYPE_TRANSPARENT
+    #if defined(_SURFACE_TYPE_TRANSPARENT)
+        bool isTransparent = true;
+    #else
+        bool isTransparent = false;
+    #endif
+
+    #if defined(_ALPHATEST_ON)
+        half alpha = AlphaDiscard(surfaceDescription.Alpha, surfaceDescription.AlphaClipThreshold);
+    #elif defined(_SURFACE_TYPE_TRANSPARENT)
         half alpha = surfaceDescription.Alpha;
     #else
-        half alpha = 1;
+        half alpha = half(1.0);
     #endif
 
     InputData inputData;
@@ -121,5 +126,8 @@ half4 frag(PackedVaryings packedInput) : SV_TARGET
     half4 color = UniversalFragmentPBR(inputData, surface);
 
     color.rgb = MixFog(color.rgb, inputData.fogCoord);
+
+    color.a = OutputAlpha(color.a, isTransparent);
+
     return color;
 }

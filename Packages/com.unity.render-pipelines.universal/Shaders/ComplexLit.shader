@@ -88,6 +88,7 @@ Shader "Universal Render Pipeline/Complex Lit"
             Blend[_SrcBlend][_DstBlend]
             ZWrite[_ZWrite]
             Cull[_Cull]
+            AlphaToMask[_AlphaClip]
 
             HLSLPROGRAM
             #pragma exclude_renderers gles gles3 glcore
@@ -331,6 +332,7 @@ Shader "Universal Render Pipeline/Complex Lit"
             Blend[_SrcBlend][_DstBlend]
             ZWrite[_ZWrite]
             Cull[_Cull]
+            AlphaToMask[_AlphaClip]
 
             HLSLPROGRAM
             #pragma only_renderers gles gles3 glcore d3d11

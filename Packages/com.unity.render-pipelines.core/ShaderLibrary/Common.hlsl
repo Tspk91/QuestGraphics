@@ -1446,7 +1446,7 @@ uint GetStencilValue(uint2 stencilBufferVal)
 // source: https://medium.com/@bgolus/anti-aliased-alpha-test-the-esoteric-alpha-to-coverage-8b177335ae4f
 float SharpenAlpha(float alpha, float alphaClipTreshold)
 {
-    return saturate((alpha - alphaClipTreshold) / max(fwidth(alpha), 0.0001) + 0.5);
+    return saturate((alpha - alphaClipTreshold) / max(fwidth(alpha), 0.0001) + 0.85);
 }
 
 // These clamping function to max of floating point 16 bit are use to prevent INF in code in case of extreme value

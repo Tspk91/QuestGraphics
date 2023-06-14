@@ -38,6 +38,8 @@ Shader "Universal Render Pipeline/Unlit"
         {
             Name "Unlit"
 
+            AlphaToMask[_AlphaClip]
+
             HLSLPROGRAM
             #pragma exclude_renderers gles gles3 glcore
             #pragma target 4.5
@@ -158,6 +160,8 @@ Shader "Universal Render Pipeline/Unlit"
         Pass
         {
             Name "Unlit"
+
+            AlphaToMask[_AlphaClip]
 
             HLSLPROGRAM
             #pragma only_renderers gles gles3 glcore d3d11

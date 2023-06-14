@@ -86,6 +86,9 @@ SAMPLER(sampler_GlossyEnvironmentCubeMap);
 #define _InvCameraViewProj unity_MatrixInvVP
 float4 _ScaledScreenParams;
 
+// 1.0 if it's possible for AlphaToMask to be enabled for this draw and 0.0 otherwise
+float _AlphaToMaskAvailable;
+
 float4 _MainLightPosition;
 half4 _MainLightColor;
 half4 _MainLightOcclusionProbes;
