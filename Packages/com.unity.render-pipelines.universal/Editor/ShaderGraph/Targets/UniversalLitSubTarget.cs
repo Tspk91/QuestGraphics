@@ -419,6 +419,7 @@ namespace UnityEditor.Rendering.Universal.ShaderGraph
                 };
 
                 CorePasses.AddTargetSurfaceControlsToPass(ref result, target);
+                CorePasses.AddAlphaToMaskControlToPass(ref result, target);
                 AddWorkflowModeControlToPass(ref result, target, workflowMode);
                 AddReceiveShadowsControlToPass(ref result, target, target.receiveShadows);
 
@@ -469,6 +470,7 @@ namespace UnityEditor.Rendering.Universal.ShaderGraph
                     result.defines.Add(LitDefines.ClearCoat, 1);
 
                 CorePasses.AddTargetSurfaceControlsToPass(ref result, target);
+                CorePasses.AddAlphaToMaskControlToPass(ref result, target);
                 AddWorkflowModeControlToPass(ref result, target, workflowMode);
                 AddReceiveShadowsControlToPass(ref result, target, target.receiveShadows);
 
