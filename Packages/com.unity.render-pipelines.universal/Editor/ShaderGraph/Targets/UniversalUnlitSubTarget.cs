@@ -249,7 +249,7 @@ namespace UnityEditor.Rendering.Universal.ShaderGraph
                     displayName = "DepthNormals",
                     referenceName = "SHADERPASS_DEPTHNORMALSONLY",
                     lightMode = "DepthNormalsOnly",
-                    useInPreview = false,
+                    useInPreview = true,
 
                     // Template
                     passTemplatePath = UniversalTarget.kUberTemplatePath,
