@@ -1444,10 +1444,10 @@ uint GetStencilValue(uint2 stencilBufferVal)
 // Sharpens the alpha of a texture to a certain width in pixels
 // Used for alpha to coverage
 // source: https://medium.com/@bgolus/anti-aliased-alpha-test-the-esoteric-alpha-to-coverage-8b177335ae4f
-// For VR we want a width of 1.85 in the resulting [0,1] alpha gradient
+// For VR we want a width of 1.55 in the resulting [0,1] alpha gradient
 float SharpenAlpha(float alpha, float alphaClipTreshold)
 {
-    return saturate((alpha - alphaClipTreshold) / max(fwidth(alpha) * 1.85, 0.0001) + 0.5);
+    return saturate((alpha - alphaClipTreshold) / max(fwidth(alpha) * 1.55, 0.0001) + 0.5);
 }
 
 // These clamping function to max of floating point 16 bit are use to prevent INF in code in case of extreme value
